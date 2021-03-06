@@ -127,7 +127,7 @@ def pad_sequence(sequences, batch_first=False, padding_value=0.0):
     return out_tensor, mask_tensor
 
 
-def preprocess_rnn_jpmc_fraud(feature, label, info):
+def preprocess_rnn_jpmc_fraud(feature, label, info, previous_label_as_feature=False):
     info['index'] = info.index
     group = info[['index', 'Sender_Id']].groupby('Sender_Id')['index'].apply(np.array).reset_index(name='indices')
 
@@ -137,5 +137,9 @@ def preprocess_rnn_jpmc_fraud(feature, label, info):
     feature_padded, feature_mask = pad_sequence(group_feature, batch_first=True)
     label_padded, label_mask = pad_sequence(group_label, batch_first=True)
     assert torch.all(feature_mask == label_mask)
+
+    if previous_label_as_feature:
+        previous_label = torch.cat((label_padded.new_full((label_padded.shape[0], 1), fill_value=1), label_padded[:, :-1]), dim=1).unsqueeze(dim=-1)
+        feature_padded = torch.cat((feature_padded, previous_label), dim=2)
 
     return feature_padded, label_padded, feature_mask

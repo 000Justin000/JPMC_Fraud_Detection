@@ -15,6 +15,7 @@ _, cts = np.unique(y, return_counts=True)
 c_weight = cts**-1.0 / (cts**-1.0).sum()
 
 method = 'RNN'
+rnn_previous_label_as_feature = True
 
 def roc_auc(logP, y):
     if type(logP) == torch.Tensor:
@@ -75,7 +76,7 @@ elif method == 'MLP':
 elif method == 'RNN':
     device = 'cuda'
     
-    x, y, mask = preprocess_rnn_jpmc_fraud(x, y, info)
+    x, y, mask = preprocess_rnn_jpmc_fraud(x, y, info, rnn_previous_label_as_feature)
     x = x.to(device)
     y = y.to(device)
     mask = mask.to(device)
