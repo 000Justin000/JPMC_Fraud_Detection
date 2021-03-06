@@ -3,7 +3,6 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.nn.utils.rnn import pad_sequence
 from datetime import datetime, timedelta
 
 
@@ -106,10 +105,37 @@ def load_jpmc_fraud():
     return feature.numpy(), label.numpy(), dat[['Sender_Id', 'Bene_Id']]
 
 
-def preprocess_rnn_jmpc_fraud(feature, label, info):
+def pad_sequence(sequences, batch_first=False, padding_value=0.0):
+
+    trailing_dims = sequences[0].shape[1:]
+    max_len = max([s.size(0) for s in sequences])
+    mask_dims = (len(sequences), max_len) if batch_first else (max_len, len(sequences))
+    out_dims = mask_dims + trailing_dims
+
+    mask_tensor = torch.zeros(mask_dims, dtype=torch.bool)
+    out_tensor = sequences[0].new_full(out_dims, padding_value)
+    for i, tensor in enumerate(sequences):
+        length = tensor.size(0)
+        # use index notation to prevent duplicate references to the tensor
+        if batch_first:
+            mask_tensor[i, :length] = True
+            out_tensor[i, :length, ...] = tensor
+        else:
+            mask_tensor[:length, i] = True
+            out_tensor[:length, i, ...] = tensor
+
+    return out_tensor, mask_tensor
+
+
+def preprocess_rnn_jpmc_fraud(feature, label, info):
     info['index'] = info.index
-    group = info[['index', 'Sender_Id']].groupby('Sender_Id').index.apply(np.array).reset_index()
-    group_feature = [torch.tensor(feature[idx], dtype=torch.float32) for idx in group['index']]
-    group_label = [torch.tensor(label[idx], dtype=torch.int64) for idx in group['index']]
+    group = info[['index', 'Sender_Id']].groupby('Sender_Id')['index'].apply(np.array).reset_index(name='indices')
+
+    group_feature = [torch.tensor(feature[idx], dtype=torch.float32) for idx in group['indices']]
+    group_label = [torch.tensor(label[idx], dtype=torch.int64) for idx in group['indices']]
     
-    padded_feature = pad_sequence(group_feature)
+    feature_padded, feature_mask = pad_sequence(group_feature, batch_first=True)
+    label_padded, label_mask = pad_sequence(group_label, batch_first=True)
+    assert torch.all(feature_mask == label_mask)
+
+    return feature_padded, label_padded, feature_mask
